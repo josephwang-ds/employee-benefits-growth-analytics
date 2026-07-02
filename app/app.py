@@ -8,6 +8,7 @@ DeepSeek 路由 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日�
 import sys
 import os
 import json
+from pathlib import Path
 import duckdb
 import numpy as np
 import pandas as pd
@@ -17,13 +18,14 @@ from scipy import stats
 sys.path.insert(0, os.path.dirname(__file__))
 from metrics_dict import METRICS  # noqa: E402
 
-DB = "data/yuyue.duckdb"
+ROOT = Path(__file__).resolve().parents[1]
+DB = ROOT / "data" / "yuyue.duckdb"
 st.set_page_config(page_title="御越福利增长分析 Demo", layout="wide")
 
 
 @st.cache_resource
 def get_con():
-    return duckdb.connect(DB, read_only=True)
+    return duckdb.connect(str(DB), read_only=True)
 
 
 def q(sql):
@@ -581,6 +583,16 @@ elif page == PAGES[9]:
     if "chatbi_question" not in st.session_state:
         st.session_state.chatbi_question = ""
 
+    def append_chatbi_log(entry):
+        if st.session_state.chatbi_log:
+            last = st.session_state.chatbi_log[-1]
+            same_question = last.get("问题") == entry.get("问题")
+            same_status = last.get("状态") == entry.get("状态")
+            same_template = last.get("模板") == entry.get("模板")
+            if same_question and same_status and same_template:
+                return
+        st.session_state.chatbi_log.append(entry)
+
     GUIDED_QUESTIONS = {
         "漏斗诊断": ["哪一步流失最大", "按部门看访问率", "按渠道看触达打开"],
         "实验决策": ["reminder 提升多少", "实验三组核销率", "SRM样本比例是否正常"],
@@ -606,7 +618,7 @@ elif page == PAGES[9]:
         blocked = next(((pat, msg) for pat, msg in BLOCKED if _re.search(pat, question)), None)
         if blocked:
             st.error(f"ChatBI 拒绝回答: {blocked[1]}")
-            st.session_state.chatbi_log.append(dict(问题=question, 状态="拒答", 模板="—"))
+            append_chatbi_log(dict(问题=question, 状态="拒答", 模板="—"))
         else:
             cands = []
             llm_note = None
@@ -616,14 +628,14 @@ elif page == PAGES[9]:
                     llm_note = decision if decision else source
                     if decision and decision.get("blocked"):
                         st.error("ChatBI 拒绝回答: " + decision.get("reason", "问题不在安全范围内。"))
-                        st.session_state.chatbi_log.append(dict(问题=question, 状态="拒答", 模板="—"))
+                        append_chatbi_log(dict(问题=question, 状态="拒答", 模板="—"))
                         st.stop()
                     template_id = decision.get("template_id") if decision else None
                     confidence = float(decision.get("confidence", 0)) if decision else 0
                     if isinstance(template_id, int) and 0 <= template_id < len(TEMPLATES) and confidence >= 0.35:
                         cands = [(round(confidence * 10, 1), TEMPLATES[template_id])]
-                except Exception as e:
-                    llm_note = f"DeepSeek 暂不可用, 已使用安全模板匹配继续回答: {e}"
+                except Exception:
+                    llm_note = "DeepSeek 暂不可用, 已使用安全模板匹配继续回答。"
             if not cands:
                 cands = retrieve(question)
             if not cands:
@@ -654,11 +666,11 @@ elif page == PAGES[9]:
                 except Exception as e:
                     st.error(f"执行失败: {e}")
                     status = "执行失败"
-                st.session_state.chatbi_log.append(
-                    dict(问题=question, 状态=status, 模板=t["name"]))
+                append_chatbi_log(dict(问题=question, 状态=status, 模板=t["name"]))
     if st.session_state.chatbi_log:
         if st.button("清空查询日志", key="clear_chatbi_log"):
             st.session_state.chatbi_log = []
+            st.session_state.chatbi_question = ""
             st.rerun()
         with st.expander(f"查询日志 ({len(st.session_state.chatbi_log)} 条)"):
             st.dataframe(pd.DataFrame(st.session_state.chatbi_log),

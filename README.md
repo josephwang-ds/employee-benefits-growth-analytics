@@ -49,9 +49,9 @@ app/app.py              10-page Streamlit app incl. metric dictionary & DeepSeek
 - **DeepSeek-routed guarded ChatBI.** Questions route through DeepSeek into a
   whitelist of vetted SQL templates — read-only, enterprise-scoped, PII-free —
   with result validation and a query log. DeepSeek selects templates only; it
-  does not generate free-form SQL. If no API key is configured, the app falls
-  back to synonym-based retrieval. Causal "why" questions are refused by design
-  and redirected to the experiment module.
+  does not generate free-form SQL. The app always executes reviewed metric
+  templates rather than arbitrary model-written queries. Causal "why" questions
+  are redirected to the experiment module.
 
 ## Metrics (from the built-in metric dictionary)
 

@@ -390,7 +390,7 @@ elif page == PAGES[8]:
 elif page == PAGES[9]:
     st.title("ChatBI (DeepSeek + 受控SQL)")
     st.caption("管线: DeepSeek 解析业务问题 → 匹配指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
-               "LLM 只负责选模板, 不生成自由 SQL; 高频查询和无 API Key 场景自动回退到同义词检索。")
+               "LLM 只负责选模板, 不生成自由 SQL; 系统始终执行已审核的标准指标模板。")
 
     # ---- 同义词字典 (参考 chatbi/ragbi.py 的 metric dictionary 思路) ----
     SYNONYMS = {
@@ -525,7 +525,7 @@ elif page == PAGES[9]:
     def deepseek_select_template(question):
         api_key = secret_value("DEEPSEEK_API_KEY")
         if not api_key:
-            return None, "未配置 DEEPSEEK_API_KEY"
+            return None, "DeepSeek 未启用"
 
         try:
             from openai import OpenAI
@@ -569,8 +569,8 @@ elif page == PAGES[9]:
         st.session_state.chatbi_log = []
 
     llm_ready = bool(secret_value("DEEPSEEK_API_KEY"))
-    st.info("DeepSeek 路由: 已启用" if llm_ready else
-            "DeepSeek 路由: 未配置 DEEPSEEK_API_KEY, 当前使用本地同义词检索 fallback")
+    if llm_ready:
+        st.info("DeepSeek 路由已启用: 业务问题会先映射到已审核指标模板, 再执行只读 SQL。")
     st.write("试试: `哪一步流失最大` / `reminder 提升多少` / `哪个供应商失败率最高` / "
              "`临期库存有多少` / `按部门看访问率` / `为什么核销率低`(演示拒答)")
     question = st.text_input("输入业务问题")
@@ -596,7 +596,7 @@ elif page == PAGES[9]:
                     if isinstance(template_id, int) and 0 <= template_id < len(TEMPLATES) and confidence >= 0.35:
                         cands = [(round(confidence * 10, 1), TEMPLATES[template_id])]
                 except Exception as e:
-                    llm_note = f"DeepSeek 调用失败, 已回退本地检索: {e}"
+                    llm_note = f"DeepSeek 暂不可用, 已使用安全模板匹配继续回答: {e}"
             if not cands:
                 cands = retrieve(question)
             if not cands:

@@ -407,7 +407,8 @@ elif page == PAGES[9]:
         "毛利": ["margin", "收入", "成本"], "库存": ["inventory", "卡券", "采购"],
         "临期": ["expiring", "过期", "老化"], "过期": ["expiring", "临期"],
         "采购": ["purchase", "库存", "批次"], "分层": ["segment", "分群", "活跃"],
-        "活跃": ["segment", "分群"], "权益": ["benefit", "卡券"],
+        "活跃": ["segment", "分群"], "cohort": ["cohort", "分群", "活跃", "留存"],
+        "权益": ["benefit", "卡券"],
     }
     TEMPLATES = [
         dict(name="漏斗各步用户数(哪一步流失最大)",
@@ -482,11 +483,21 @@ elif page == PAGES[9]:
                     WHERE o.redemption_status='success'""",
              explain="已结算金额/批准预算=68.5%; 过低影响客户续约判断。"),
         dict(name="分群(活跃度)核销率对比",
-             tags=["分层", "分群", "活跃", "segment", "对比"],
+             tags=["分层", "分群", "活跃", "segment", "cohort", "对比"],
              sql="""SELECT activity_segment, COUNT(*) users,
                     ROUND(SUM(redeemed_14d_flag)*100.0/SUM(issued_flag),1) redeem_pct
                     FROM dws_user_campaign WHERE issued_flag=1 GROUP BY 1 ORDER BY redeem_pct""",
              explain="High 分群本来就高=Sure Thing; 干预价值要看增量(Uplift), 不是基线高低。"),
+        dict(name="Cohort分群表现",
+             tags=["cohort", "是什么", "含义", "分群", "活跃", "留存", "表现"],
+             sql="""SELECT activity_segment AS cohort, COUNT(*) users,
+                    ROUND(SUM(visited_flag)*100.0/SUM(issued_flag),1) visit_pct,
+                    ROUND(SUM(claimed_flag)*100.0/SUM(issued_flag),1) claim_pct,
+                    ROUND(SUM(redeemed_14d_flag)*100.0/SUM(issued_flag),1) redeem14_pct
+                    FROM dws_user_campaign WHERE issued_flag=1
+                    GROUP BY 1 ORDER BY CASE activity_segment
+                    WHEN 'New' THEN 1 WHEN 'Low' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END""",
+             explain="Cohort在这里指按历史活跃度划分的人群(New/Low/Medium/High), 用来比较不同人群在访问、领取、核销上的表现差异。"),
     ]
     BLOCKED = [
         ("手机号|身份证|姓名|电话", "涉及个人敏感字段, 字段白名单外, 拒绝返回。"),
@@ -567,13 +578,29 @@ elif page == PAGES[9]:
 
     if "chatbi_log" not in st.session_state:
         st.session_state.chatbi_log = []
+    if "chatbi_question" not in st.session_state:
+        st.session_state.chatbi_question = ""
+
+    GUIDED_QUESTIONS = {
+        "漏斗诊断": ["哪一步流失最大", "按部门看访问率", "按渠道看触达打开"],
+        "实验决策": ["reminder 提升多少", "实验三组核销率", "SRM样本比例是否正常"],
+        "库存风险": ["临期库存有多少", "预算使用率", "领取后未核销人数"],
+        "履约与分群": ["哪个供应商失败率最高", "退款集中在哪种权益", "cohort是什么"],
+    }
 
     llm_ready = bool(secret_value("DEEPSEEK_API_KEY"))
     if llm_ready:
         st.info("DeepSeek 路由已启用: 业务问题会先映射到已审核指标模板, 再执行只读 SQL。")
-    st.write("试试: `哪一步流失最大` / `reminder 提升多少` / `哪个供应商失败率最高` / "
-             "`临期库存有多少` / `按部门看访问率` / `为什么核销率低`(演示拒答)")
-    question = st.text_input("输入业务问题")
+    st.write("先从一个业务问题开始:")
+    for group, questions in GUIDED_QUESTIONS.items():
+        st.caption(group)
+        cols = st.columns(len(questions))
+        for col, sample in zip(cols, questions):
+            if col.button(sample, key=f"chatbi_sample_{group}_{sample}"):
+                st.session_state.chatbi_question = sample
+                st.rerun()
+
+    question = st.text_input("输入业务问题", key="chatbi_question")
     if question:
         import re as _re
         blocked = next(((pat, msg) for pat, msg in BLOCKED if _re.search(pat, question)), None)
@@ -600,9 +627,8 @@ elif page == PAGES[9]:
             if not cands:
                 cands = retrieve(question)
             if not cands:
-                st.warning("未匹配到白名单指标模板。受控 ChatBI 只回答指标字典内的问题——这是有意设计: "
-                           "防止生成未经口径校验的 SQL。可换个说法, 或从上面示例问题开始。")
-                st.session_state.chatbi_log.append(dict(问题=question, 状态="未命中", 模板="—"))
+                st.info("这个问题更适合先改写成一个可量化的经营问题。可以从上方按钮选择一个入口, "
+                        "例如漏斗、实验、库存、供应商履约或Cohort分群。")
             else:
                 # 检索透明化: 展示候选模板与得分 (参考 chatbi 的 retrieval 可视化)
                 with st.expander("Step 1 — 意图检索 (候选模板与相关度)", expanded=False):
@@ -631,6 +657,9 @@ elif page == PAGES[9]:
                 st.session_state.chatbi_log.append(
                     dict(问题=question, 状态=status, 模板=t["name"]))
     if st.session_state.chatbi_log:
+        if st.button("清空查询日志", key="clear_chatbi_log"):
+            st.session_state.chatbi_log = []
+            st.rerun()
         with st.expander(f"查询日志 ({len(st.session_state.chatbi_log)} 条)"):
             st.dataframe(pd.DataFrame(st.session_state.chatbi_log),
                          use_container_width=True, hide_index=True)

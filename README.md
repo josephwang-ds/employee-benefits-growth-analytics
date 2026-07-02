@@ -90,7 +90,7 @@ to GitHub.
 
 ## Related projects
 
-- **ChatBI** — full LLM Text-to-SQL version of the guarded ChatBI idea
-  (RAG schema linking, sqlglot AST safety gate, result validation). This demo
-  intentionally keeps SQL template-controlled while using DeepSeek for routing.
+- **ChatBI** — standalone Text-to-SQL project with RAG schema linking, sqlglot
+  AST safety gates, and result validation. This demo uses the same safety
+  philosophy while keeping SQL template-controlled for interview reliability.
 - **Growth & Funnel Agent** — funnel-leak detection and budget reallocation.

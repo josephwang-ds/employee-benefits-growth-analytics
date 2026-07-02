@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Step 7: Uplift 可信实施计划 (v2 口径) — 阶段三/四的离线原型
+Uplift 可信实施计划 — 离线原型与实施评估
 四阶段: (1)分层异质性分析[见 analysis_experiment.py] -> (2)积累多批次实验标签
         -> (3)基线: 随机触达 + Propensity Model -> (4)T-Learner 离线原型 + Qini/AUUC
 定位说明: 单次 1,500 人实验不足以支撑生产级 Uplift 系统。本脚本是离线原型,

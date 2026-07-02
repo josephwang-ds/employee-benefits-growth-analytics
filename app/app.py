@@ -70,7 +70,7 @@ if page == PAGES[0]:
     c[0].metric("企业结算收入", f"¥{k.settled:,.0f}",
                 help="有效核销订单 settlement_amount 合计")
     c[1].metric("采购成本(已消耗)", f"¥{k.sup_cost:,.0f}",
-                help="v2口径: 已核销卡券对应的采购成本")
+                help="已核销卡券对应的采购成本")
     c[2].metric("贡献毛利", f"¥{k.settled - k.sup_cost - k.rew_cost:,.0f}",
                 help="收入-已消耗采购成本-奖励。完整口径还需减过期损失和消息成本, 见指标字典")
     st.info("Executive Summary: 发放与触达正常; 主要流失在 触达→访问 与 领取→核销; "
@@ -333,7 +333,7 @@ elif page == PAGES[6]:
 
 # ---------------------------------------------------------------- Page 7 库存
 elif page == PAGES[7]:
-    st.title("卡券采购与库存 (v2)")
+    st.title("卡券采购与库存")
     AS_OF = "2026-04-05"
     b = q("""SELECT COUNT(*) purchased,
              SUM(CASE WHEN coupon_status != 'available' THEN 1 ELSE 0 END) assigned,
@@ -635,5 +635,5 @@ elif page == PAGES[9]:
             st.dataframe(pd.DataFrame(st.session_state.chatbi_log),
                          use_container_width=True, hide_index=True)
     st.caption("权限规则: 企业隔离(enterprise_id 强制过滤) / 只读 / 字段白名单(无PII) / "
-               "限流 / 结果与标准KPI表校验 / SQL日志。完整 LLM 版见我的 ChatBI 项目"
-               "(RAG检索 + sqlglot AST 安全门 + DeepSeek 生成)。")
+               "限流 / 结果与标准KPI表校验 / SQL日志。独立 ChatBI 项目展示更开放的 "
+               "Text-to-SQL 架构(RAG检索 + sqlglot AST 安全门 + DeepSeek 生成)。")

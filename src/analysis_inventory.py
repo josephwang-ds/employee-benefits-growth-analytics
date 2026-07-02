@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-v2 新增 — 卡券采购与库存分析
+卡券采购与库存分析
 两条 Funnel 的第二条: 卡券库存 Funnel (coupon_instance_id 粒度)
 回答: 采购回来的卡券在哪一步没有被消化; 到期/资金风险有多大 
 用法: python src/analysis_inventory.py [--db data/yuyue.duckdb]
@@ -73,7 +73,7 @@ def capital_usage(con):
     print(f"  未消化库存资金  ¥{b.unconsumed_capital:,.0f}  "
           f"({b.unconsumed_capital/b.total_purchase_cost:.0%})")
     print("""
-  贡献毛利口径 (v2):
+  贡献毛利口径:
   贡献毛利 = 企业结算收入 - 已消耗卡券采购成本 - 过期/不可退损失 - 奖励 - 消息成本
   => 低核销不只是收入未实现, 还有真金白银的库存损失, 这是做增量运营的商业动机""")
 

@@ -336,7 +336,7 @@ def main(seed=42, db_path="data/yuyue.duckdb", n_users=5000):
     for c in ["settlement_amount", "supplier_cost", "reward_cost", "fulfilled_flag", "complaint_flag"]:
         dws[c] = dws[c].fillna(0)
 
-    # ---------- v2: 卡券采购批次 + 库存实例 (独立随机流, 不影响已校准口径) ----------
+    # ---------- 卡券采购批次 + 库存实例 (独立随机流, 不影响已校准口径) ----------
     rng2 = np.random.default_rng(seed + 7777)
     REFUNDABLE = {"B001": True, "B002": True, "B003": True,
                   "B004": False, "B005": True, "B006": False}  # 电影/健康 不可退

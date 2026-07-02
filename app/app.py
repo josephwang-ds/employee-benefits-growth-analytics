@@ -7,6 +7,7 @@ v2.1: 新增指标字典页; Funnel 漏点自动诊断; ChatBI 升级为
 """
 import sys
 import os
+import json
 import duckdb
 import numpy as np
 import pandas as pd
@@ -387,9 +388,9 @@ elif page == PAGES[8]:
 
 # ---------------------------------------------------------------- Page 9 ChatBI
 elif page == PAGES[9]:
-    st.title("ChatBI (受控原型 v2.1)")
-    st.caption("管线: 意图检索(同义词+打分) → 指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
-               "生产版由 LLM 做问题解析与解释, 但 SQL 只能出自白名单模板; 高频查询直连数据库不过 LLM。")
+    st.title("ChatBI (DeepSeek + 受控SQL)")
+    st.caption("管线: DeepSeek 解析业务问题 → 匹配指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
+               "LLM 只负责选模板, 不生成自由 SQL; 高频查询和无 API Key 场景自动回退到同义词检索。")
 
     # ---- 同义词字典 (参考 chatbi/ragbi.py 的 metric dictionary 思路) ----
     SYNONYMS = {
@@ -515,9 +516,61 @@ elif page == PAGES[9]:
         scored.sort(key=lambda x: -x[0])
         return scored[:top_n]
 
+    def secret_value(name, default=None):
+        try:
+            return st.secrets.get(name, os.environ.get(name, default))
+        except Exception:
+            return os.environ.get(name, default)
+
+    def deepseek_select_template(question):
+        api_key = secret_value("DEEPSEEK_API_KEY")
+        if not api_key:
+            return None, "未配置 DEEPSEEK_API_KEY"
+
+        try:
+            from openai import OpenAI
+        except Exception:
+            return None, "未安装 openai 依赖"
+
+        template_brief = [
+            dict(id=i, name=t["name"], tags=t["tags"], explanation=t["explain"])
+            for i, t in enumerate(TEMPLATES)
+        ]
+        system_prompt = (
+            "你是企业福利增长分析的 ChatBI 路由器。"
+            "你的任务不是写 SQL, 而是把用户问题匹配到一个已审核的白名单模板。"
+            "如果问题涉及个人敏感信息、跨企业数据、或因果为什么类问题, 返回 blocked=true。"
+            "如果没有合适模板, 返回 template_id=null。"
+            "只输出 JSON, 格式: "
+            "{\"blocked\": false, \"template_id\": 0, \"confidence\": 0.0, \"reason\": \"简短中文原因\"}"
+        )
+        client = OpenAI(
+            api_key=api_key,
+            base_url=secret_value("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+        )
+        response = client.chat.completions.create(
+            model=secret_value("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps({
+                    "question": question,
+                    "templates": template_brief,
+                }, ensure_ascii=False)},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+            stream=False,
+        )
+        raw = response.choices[0].message.content or "{}"
+        decision = json.loads(raw)
+        return decision, "DeepSeek"
+
     if "chatbi_log" not in st.session_state:
         st.session_state.chatbi_log = []
 
+    llm_ready = bool(secret_value("DEEPSEEK_API_KEY"))
+    st.info("DeepSeek 路由: 已启用" if llm_ready else
+            "DeepSeek 路由: 未配置 DEEPSEEK_API_KEY, 当前使用本地同义词检索 fallback")
     st.write("试试: `哪一步流失最大` / `reminder 提升多少` / `哪个供应商失败率最高` / "
              "`临期库存有多少` / `按部门看访问率` / `为什么核销率低`(演示拒答)")
     question = st.text_input("输入业务问题")
@@ -528,7 +581,24 @@ elif page == PAGES[9]:
             st.error(f"ChatBI 拒绝回答: {blocked[1]}")
             st.session_state.chatbi_log.append(dict(问题=question, 状态="拒答", 模板="—"))
         else:
-            cands = retrieve(question)
+            cands = []
+            llm_note = None
+            if llm_ready:
+                try:
+                    decision, source = deepseek_select_template(question)
+                    llm_note = decision if decision else source
+                    if decision and decision.get("blocked"):
+                        st.error("ChatBI 拒绝回答: " + decision.get("reason", "问题不在安全范围内。"))
+                        st.session_state.chatbi_log.append(dict(问题=question, 状态="拒答", 模板="—"))
+                        st.stop()
+                    template_id = decision.get("template_id") if decision else None
+                    confidence = float(decision.get("confidence", 0)) if decision else 0
+                    if isinstance(template_id, int) and 0 <= template_id < len(TEMPLATES) and confidence >= 0.35:
+                        cands = [(round(confidence * 10, 1), TEMPLATES[template_id])]
+                except Exception as e:
+                    llm_note = f"DeepSeek 调用失败, 已回退本地检索: {e}"
+            if not cands:
+                cands = retrieve(question)
             if not cands:
                 st.warning("未匹配到白名单指标模板。受控 ChatBI 只回答指标字典内的问题——这是有意设计: "
                            "防止生成未经口径校验的 SQL。可换个说法, 或从上面示例问题开始。")
@@ -536,6 +606,8 @@ elif page == PAGES[9]:
             else:
                 # 检索透明化: 展示候选模板与得分 (参考 chatbi 的 retrieval 可视化)
                 with st.expander("Step 1 — 意图检索 (候选模板与相关度)", expanded=False):
+                    if llm_note:
+                        st.write(llm_note)
                     st.table(pd.DataFrame([dict(模板=t["name"], 相关度=s) for s, t in cands]))
                 score, t = cands[0]
                 st.markdown(f"**命中模板**: {t['name']}")

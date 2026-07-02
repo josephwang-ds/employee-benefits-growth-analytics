@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-御越企业福利增长分析 Demo — Streamlit Dashboard + 受控 ChatBI (v2.1)
+御越企业福利增长分析 Demo — Streamlit Dashboard + DeepSeek ChatBI
 运行: streamlit run app/app.py
-v2.1: 新增指标字典页; Funnel 漏点自动诊断; ChatBI 升级为
-      同义词检索打分 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日志
+包含指标字典、Funnel 漏点自动诊断、实验/ROI 分析，以及
+DeepSeek 路由 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日志
 """
 import sys
 import os
@@ -32,7 +32,7 @@ def q(sql):
 
 PAGES = ["1 Executive Overview", "2 指标字典 (口径)", "3 Funnel 诊断", "4 Cohort 分析",
          "5 用户分层", "6 实验结果", "7 ROI Simulator", "8 采购与库存",
-         "9 供应商履约", "10 ChatBI (受控)"]
+         "9 供应商履约", "10 ChatBI"]
 page = st.sidebar.radio("页面", PAGES)
 st.sidebar.caption("Demo 数据为按真实项目口径校准的模拟数据（企业/员工信息已脱敏）")
 

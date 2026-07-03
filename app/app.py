@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-御越企业福利增长分析 Demo — Streamlit Dashboard + DeepSeek ChatBI
+Benefits Growth Analytics Demo — Streamlit Dashboard + DeepSeek ChatBI
 运行: streamlit run app/app.py
 包含指标字典、Funnel 漏点自动诊断、实验/ROI 分析，以及
 DeepSeek 路由 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日志
@@ -19,8 +19,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from metrics_dict import METRICS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-DB = ROOT / "data" / "yuyue.duckdb"
-st.set_page_config(page_title="御越福利增长分析 Demo", layout="wide")
+DB = ROOT / "data" / "benefits.duckdb"
+st.set_page_config(page_title="Benefits Growth Analytics", layout="wide")
 
 
 @st.cache_resource

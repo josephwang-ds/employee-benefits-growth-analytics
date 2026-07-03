@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-御越企业福利增长分析 Demo — 合成数据生成器
+Benefits Growth Analytics Demo — 合成数据生成器
 =============================================
 生成 11 张核心表（ODS/DIM/FACT）+ 1 张 dws 用户活动宽表，写入 DuckDB。
 
@@ -16,7 +16,7 @@
   Day 14-28    实验观察窗口（实验的 14 天核销率）
   Day 45       卡券过期
 
-用法: python src/generate_data.py [--seed 42] [--db data/yuyue.duckdb]
+用法: python src/generate_data.py [--seed 42] [--db data/benefits.duckdb]
 """
 import argparse
 import numpy as np
@@ -64,7 +64,7 @@ def ts(day, jitter_h=10):
     return BASE + timedelta(days=float(day), hours=float(np.random.uniform(0, jitter_h)))
 
 
-def main(seed=42, db_path="data/yuyue.duckdb", n_users=5000):
+def main(seed=42, db_path="data/benefits.duckdb", n_users=5000):
     rng = np.random.default_rng(seed)
     np.random.seed(seed)
 
@@ -457,6 +457,6 @@ def main(seed=42, db_path="data/yuyue.duckdb", n_users=5000):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=9)  # seed=9 经校准使各指标最贴近目标口径
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     main(seed=args.seed, db_path=args.db)

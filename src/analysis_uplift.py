@@ -5,7 +5,7 @@ Uplift 可信实施计划 — 离线原型与实施评估
         -> (3)基线: 随机触达 + Propensity Model -> (4)T-Learner 离线原型 + Qini/AUUC
 定位说明: 单次 1,500 人实验不足以支撑生产级 Uplift 系统。本脚本是离线原型,
 本模块定位为离线设计与评估方法; 上线需新活动 Holdout 验证。
-用法: python src/analysis_uplift.py [--db data/yuyue.duckdb]
+用法: python src/analysis_uplift.py [--db data/benefits.duckdb]
 """
 import argparse
 import duckdb
@@ -134,7 +134,7 @@ def topk_policy(te, margin=13.0, msg_cost=0.05):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     con = duckdb.connect(args.db, read_only=True)
     df = load(con)

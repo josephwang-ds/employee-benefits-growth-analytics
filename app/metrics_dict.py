@@ -128,7 +128,7 @@ METRICS = [
          分子="—", 分母="—", 粒度="金额",
          排除规则="成本按已消耗采购成本、库存损失、奖励补贴和消息触达成本统一核算",
          来源表="fact_redemption_order / fact_coupon_inventory / dim_benefit",
-         业务意义="御越先采购后结算, 低核销=收入未实现+资金占用+过期损失三重打击",
+         业务意义="平台方先采购后结算, 低核销=收入未实现+资金占用+过期损失三重打击",
          live_sql="""SELECT ROUND(SUM(settlement_amount - supplier_cost - reward_cost),0)
                      FROM fact_redemption_order WHERE redemption_status='success'"""),
     dict(类别="财务", 指标="单次增量核销贡献",

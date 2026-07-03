@@ -3,7 +3,7 @@
 卡券采购与库存分析
 两条 Funnel 的第二条: 卡券库存 Funnel (coupon_instance_id 粒度)
 回答: 采购回来的卡券在哪一步没有被消化; 到期/资金风险有多大 
-用法: python src/analysis_inventory.py [--db data/yuyue.duckdb]
+用法: python src/analysis_inventory.py [--db data/benefits.duckdb]
 """
 import argparse
 import duckdb
@@ -97,7 +97,7 @@ def purchase_coverage(con):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     con = duckdb.connect(args.db, read_only=True)
     inventory_funnel(con)

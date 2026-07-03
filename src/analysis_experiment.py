@@ -2,7 +2,7 @@
 """
 Step 5-6: A/B 实验分析 — SRM、平衡性、Lift、CI、p-value、Guardrails
 目标口径: Control ~28.6% / Reminder ~34.8% / Reminder+Reward ~37.1%
-用法: python src/analysis_experiment.py [--db data/yuyue.duckdb]
+用法: python src/analysis_experiment.py [--db data/benefits.duckdb]
 """
 import argparse
 import duckdb
@@ -115,12 +115,13 @@ def guardrails(con):
     GROUP BY 1 ORDER BY 1
     """
     print(con.execute(q).df().to_string(index=False))
-    print("  口径: 投诉率/退款率组间无恶化 => 提醒未造成体验损伤")
+    print("  口径: Reminder 组投诉/退款与 Control 持平 => 提醒本身未造成体验损伤;\n"
+          "        Reward 组投诉略高(与履约压力相关), 是不推全量 Reward 的辅助证据")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     con = duckdb.connect(args.db, read_only=True)
     df = load(con)

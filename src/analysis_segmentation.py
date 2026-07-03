@@ -4,7 +4,7 @@
 与静态历史活跃度分层(activity_segment)是两层体系:
   静态层: New/Low/Medium/High  —— 谁是什么样的人(历史)
   规则层: 本次活动中的行为状态  —— 现在该对谁做什么(动作)
-用法: python src/analysis_segmentation.py [--db data/yuyue.duckdb]
+用法: python src/analysis_segmentation.py [--db data/benefits.duckdb]
 """
 import argparse
 import duckdb
@@ -88,7 +88,7 @@ Reward Sensitive 层说明: 需要历史奖励活动的响应数据才能标注;
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     con = duckdb.connect(args.db, read_only=True)
     segment_summary(con)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Step 3-4: Funnel 与 Cohort 分析（全部基于 DuckDB SQL, 统一口径）
-用法: python src/analysis_funnel_cohort.py [--db data/yuyue.duckdb]
+用法: python src/analysis_funnel_cohort.py [--db data/benefits.duckdb]
 """
 import argparse
 import duckdb
@@ -167,7 +167,7 @@ def data_quality(con):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default="data/yuyue.duckdb")
+    ap.add_argument("--db", default="data/benefits.duckdb")
     args = ap.parse_args()
     con = duckdb.connect(args.db, read_only=True)
     data_quality(con)

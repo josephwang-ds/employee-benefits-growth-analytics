@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Streamlit page: interactive data schema (15 tables + diagrams + live explorer)."""
 import pandas as pd
+import streamlit as st
 import streamlit.components.v1 as components
 
 FUNNEL_MERMAID = """

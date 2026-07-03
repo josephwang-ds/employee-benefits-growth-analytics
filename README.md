@@ -26,7 +26,7 @@ analysis_funnel_cohort  QC (PK / time-order / consistency) + 7-step user funnel 
 analysis_inventory      coupon-inventory funnel, aging, expiry-risk exposure, capital usage
 analysis_experiment     SRM -> balance -> two-proportion z-tests + CI -> ROI -> heterogeneity -> guardrails
 analysis_uplift         T-Learner offline prototype + propensity baseline + Qini/AUUC + top-k policy
-app/app.py              10-page Streamlit app incl. metric dictionary & DeepSeek-routed guarded ChatBI
+app/app.py              11-page Streamlit app incl. data schema, metric dictionary & DeepSeek-routed guarded ChatBI
 ```
 
 ## Key design points
@@ -60,6 +60,12 @@ guardrail / long-term categories, each documented with definition, numerator,
 denominator, grain, exclusion rules, source tables, and live SQL. Headline
 values in the synthetic dataset: issue 98.8%, reach 92.4%, visit 63.6%,
 claim 47.3%, 14-day redemption 31.2%, fulfillment 95.9%, budget utilization 68.5%.
+
+## Data schema
+
+See **[docs/DATA_SCHEMA.md](docs/DATA_SCHEMA.md)** for a visual guide to all 15 tables.
+The same content is also available as **page 2 "Data Schema"** in the Streamlit app
+(funnel + ER diagrams, live row counts, table explorer, join templates).
 
 ## Quickstart
 

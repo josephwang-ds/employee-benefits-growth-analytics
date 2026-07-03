@@ -17,8 +17,10 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(__file__))
 from metrics_dict import METRICS  # noqa: E402
+from schema_page import render_schema_page  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_DOC = ROOT / "docs" / "DATA_SCHEMA.md"
 DB = ROOT / "data" / "benefits.duckdb"
 st.set_page_config(page_title="Benefits Growth Analytics", layout="wide")
 
@@ -32,9 +34,9 @@ def q(sql):
     return get_con().execute(sql).df()
 
 
-PAGES = ["1 Executive Overview", "2 指标字典 (口径)", "3 Funnel 诊断", "4 Cohort 分析",
-         "5 用户分层", "6 实验结果", "7 ROI Simulator", "8 采购与库存",
-         "9 供应商履约", "10 ChatBI"]
+PAGES = ["1 Executive Overview", "2 Data Schema (表结构)", "3 指标字典 (口径)",
+         "4 Funnel 诊断", "5 Cohort 分析", "6 用户分层", "7 实验结果",
+         "8 ROI Simulator", "9 采购与库存", "10 供应商履约", "11 ChatBI"]
 page = st.sidebar.radio("页面", PAGES)
 st.sidebar.caption("Demo 数据为按真实项目口径校准的模拟数据（企业/员工信息已脱敏）")
 
@@ -77,10 +79,14 @@ if page == PAGES[0]:
                 help="收入-已消耗采购成本-奖励。完整口径还需减过期损失和消息成本, 见指标字典")
     st.info("Executive Summary: 发放与触达正常; 主要流失在 触达→访问 与 领取→核销; "
             "到期提醒实验显示 +6pp 增量, 额外奖励边际价值有限, 建议扩大分层提醒而非全量补贴。")
-    st.caption("每个卡片右上角 ? 号有完整口径; 更详细的分子/分母/排除规则见「2 指标字典」页")
+    st.caption("每个卡片右上角 ? 号有完整口径; 更详细的分子/分母/排除规则见「3 指标字典」页")
 
-# ---------------------------------------------------------------- Page 2 指标字典
+# ---------------------------------------------------------------- Page 2 Data Schema
 elif page == PAGES[1]:
+    render_schema_page(q, docs_path=SCHEMA_DOC)
+
+# ---------------------------------------------------------------- Page 3 指标字典
+elif page == PAGES[2]:
     st.title("指标字典 — 统一口径的唯一来源")
     st.caption("背景: 报表不一致的根因通常是口径不统一, 所以第一步是建指标字典+标准SQL。"
                "本页每个指标含定义/分子/分母/粒度/排除规则/来源表/业务意义, 带实时值的直接从库里算。")
@@ -119,8 +125,8 @@ elif page == PAGES[1]:
             if m.get("live_sql"):
                 st.code(m["live_sql"].strip(), language="sql")
 
-# ---------------------------------------------------------------- Page 3 Funnel
-elif page == PAGES[2]:
+# ---------------------------------------------------------------- Page 4 Funnel
+elif page == PAGES[3]:
     st.title("Funnel 诊断")
     dim = st.selectbox("拆解维度", ["总体", "department_group", "benefit_type",
                                     "activity_segment", "region"])
@@ -184,8 +190,8 @@ elif page == PAGES[2]:
     cc[2].metric("领取 → 核销", f"{b.redeemed_14d/b.claimed:.1%}",
                  help="'领了忘用'的量化, 到期提醒实验的动机")
 
-# ---------------------------------------------------------------- Page 4 Cohort
-elif page == PAGES[3]:
+# ---------------------------------------------------------------- Page 5 Cohort
+elif page == PAGES[4]:
     st.title("Cohort 分析")
     st.subheader("历史活跃度 Cohort")
     st.dataframe(q("""
@@ -214,9 +220,8 @@ elif page == PAGES[3]:
     st.caption("注意: Cohort 描述差异, 不做因果判断; 因果结论以实验为准。"
                "High 分群本次核销率最高=Sure Thing 证据, 是 Uplift 建模动机。")
 
-# ---------------------------------------------------------------- Page 6 实验
-# ---------------------------------------------------------------- Page 5 用户分层
-elif page == PAGES[4]:
+# ---------------------------------------------------------------- Page 6 用户分层
+elif page == PAGES[5]:
     st.title("用户分层 — 规则层 (行为状态 → 运营动作)")
     st.caption("两层体系: 静态层(历史活跃度 New/Low/Medium/High)回答'这是什么人', 用于分层随机与 Cohort; "
                "规则层(本页)回答'现在对他做什么', 每层直接映射一个运营动作。分层时点=Day14, 即实验分组的输入。")
@@ -262,7 +267,8 @@ elif page == PAGES[4]:
     st.info("Visited Not Redeemed(~1,600人) 就是三组实验的人群来源(再叠加未过期/无投诉等资格条件取~1,500)。"
             "Reward Sensitive 层需要历史奖励活动数据标注, 实验 Reward 组的响应是第一批标注来源, 属后续迭代。")
 
-elif page == PAGES[5]:
+# ---------------------------------------------------------------- Page 7 实验
+elif page == PAGES[6]:
     st.title("实验结果 — 到期提醒 A/B/C")
     df = q("""SELECT e.group_name, e.stratification_key segment, d.exp_redeemed_flag y
               FROM fact_experiment_assignment e
@@ -306,7 +312,7 @@ elif page == PAGES[5]:
             "High 分群零增量 = Sure Thing, 是 Uplift 建模的直接动机。")
 
 # ---------------------------------------------------------------- Page 6 ROI
-elif page == PAGES[6]:
+elif page == PAGES[7]:
     st.title("ROI Simulator")
     c1, c2 = st.columns(2)
     n_target = c1.number_input("目标触达人数", 100, 5000, 1500, 100)
@@ -333,8 +339,8 @@ elif page == PAGES[6]:
     st.caption("口径: 增量贡献 = 增量核销 × (结算收入 - 采购成本) - 消息成本 - 奖励成本。"
                "试一试: Lift 拉到多大时 5 元奖励才划算? (≈15pp, 不现实 → 结论稳健)")
 
-# ---------------------------------------------------------------- Page 7 库存
-elif page == PAGES[7]:
+# ---------------------------------------------------------------- Page 9 库存
+elif page == PAGES[8]:
     st.title("卡券采购与库存")
     AS_OF = "2026-04-05"
     b = q("""SELECT COUNT(*) purchased,
@@ -367,8 +373,8 @@ elif page == PAGES[7]:
     st.warning("行动: 临期卡券优先用于高Lift人群提醒或转入后续活动; "
                "不可退短效期权益(电影/健康)压缩采购上限 。")
 
-# ---------------------------------------------------------------- Page 8 履约
-elif page == PAGES[8]:
+# ---------------------------------------------------------------- Page 10 履约
+elif page == PAGES[9]:
     st.title("供应商履约监控")
     st.dataframe(q("""
         SELECT f.supplier_id, d.benefit_type,
@@ -388,8 +394,8 @@ elif page == PAGES[8]:
         use_container_width=True, hide_index=True)
     st.warning("SUP04(电影) 履约率最低, 主因库存不足 -> 活动前确认供应商容量, 设履约护栏。")
 
-# ---------------------------------------------------------------- Page 9 ChatBI
-elif page == PAGES[9]:
+# ---------------------------------------------------------------- Page 11 ChatBI
+elif page == PAGES[10]:
     st.title("ChatBI (DeepSeek + 受控SQL)")
     st.caption("管线: DeepSeek 解析业务问题 → 匹配指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
                "LLM 只负责选模板, 不生成自由 SQL; 系统始终执行已审核的标准指标模板。")

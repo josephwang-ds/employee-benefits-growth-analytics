@@ -12,6 +12,7 @@ from pathlib import Path
 import duckdb
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from scipy import stats
 
@@ -30,8 +31,11 @@ def get_con():
     return duckdb.connect(str(DB), read_only=True)
 
 
-def q(sql):
-    return get_con().execute(sql).df()
+@st.cache_data(show_spinner=False)
+def q(sql, params=None):
+    # cursor() 保证多会话/多线程安全; cache_data 避免每次交互全页重跑 SQL
+    cur = get_con().cursor()
+    return (cur.execute(sql, params) if params else cur.execute(sql)).df()
 
 
 PAGES = ["1 Executive Overview", "2 Data Schema (表结构)", "3 指标字典 (口径)",
@@ -78,7 +82,7 @@ if page == PAGES[0]:
     c[2].metric("贡献毛利", f"¥{k.settled - k.sup_cost - k.rew_cost:,.0f}",
                 help="收入-已消耗采购成本-奖励。完整口径还需减过期损失和消息成本, 见指标字典")
     st.info("Executive Summary: 发放与触达正常; 主要流失在 触达→访问 与 领取→核销; "
-            "到期提醒实验显示 +6pp 增量, 额外奖励边际价值有限, 建议扩大分层提醒而非全量补贴。")
+            "到期提醒实验显示 +6.2pp 增量, 额外奖励边际价值有限, 建议扩大分层提醒而非全量补贴。")
     st.caption("每个卡片右上角 ? 号有完整口径; 更详细的分子/分母/排除规则见「3 指标字典」页")
 
 # ---------------------------------------------------------------- Page 2 Data Schema
@@ -130,26 +134,43 @@ elif page == PAGES[3]:
     st.title("Funnel 诊断")
     dim = st.selectbox("拆解维度", ["总体", "department_group", "benefit_type",
                                     "activity_segment", "region"])
-    where = "1=1"
+    where, params = "1=1", None
     if dim != "总体":
         val = st.selectbox("取值", q(f"SELECT DISTINCT {dim} FROM dws_user_campaign").iloc[:, 0])
-        where = f"{dim} = '{val}'"
+        where, params = f"{dim} = ?", [val]  # dim 来自固定白名单, 值走参数绑定防注入
     b = q(f"""SELECT COUNT(*) eligible, SUM(issued_flag) issued, SUM(reached_flag) reached,
               SUM(visited_flag) visited, SUM(claimed_flag) claimed,
               SUM(redeemed_14d_flag) redeemed_14d,
               SUM(CASE WHEN redeemed_14d_flag=1 AND fulfilled_flag=1 THEN 1 ELSE 0 END) fulfilled
-              FROM dws_user_campaign WHERE {where}""").iloc[0]
+              FROM dws_user_campaign WHERE {where}""", params).iloc[0]
     stages = ["eligible", "issued", "reached", "visited", "claimed", "redeemed_14d", "fulfilled"]
     mode = st.radio("口径", ["Stage Conversion", "Cumulative (vs issued)"], horizontal=True)
     rows = []
     for i, s in enumerate(stages):
         n = int(b[s])
-        conv = (n / b[stages[i-1]] if i else 1) if mode == "Stage Conversion" else \
-               (n / b["issued"] if b["issued"] else 0)
-        rows.append(dict(stage=s, users=n, conversion=round(conv * 100, 1),
+        if mode == "Stage Conversion":
+            conv = n / b[stages[i-1]] if i else 1
+        else:  # Cumulative 口径分母=issued, eligible 行不适用(否则>100%)
+            conv = n / b["issued"] if (i and b["issued"]) else None
+        rows.append(dict(stage=s, users=n,
+                         conversion=round(conv * 100, 1) if conv is not None else None,
                          loss=int(b[stages[i-1]] - n) if i else 0))
     fdf = pd.DataFrame(rows)
-    st.bar_chart(fdf.set_index("stage")["users"])
+
+    # --- 可视化漏斗 ---
+    STAGE_CN = {"eligible": "资格 Eligible", "issued": "发放 Issued",
+                "reached": "触达 Reached", "visited": "访问 Visited",
+                "claimed": "领取 Claimed", "redeemed_14d": "14天核销 Redeemed",
+                "fulfilled": "履约 Fulfilled"}
+    LEAK = {"visited", "redeemed_14d"}  # 两大断点: 触达→访问, 领取→核销
+    fig = go.Figure(go.Funnel(
+        y=[STAGE_CN[s] for s in stages], x=fdf.users,
+        textposition="inside", textinfo="value+percent previous",
+        marker=dict(color=["#d62728" if s in LEAK else "#1f77b4" for s in stages]),
+        connector=dict(line=dict(color="#cccccc", width=1))))
+    fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=430)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("红色 = 两大断点(触达→访问, 领取→核销); 图内百分比 = 相对上一阶段的转化率(阶段口径)")
     st.dataframe(fdf, use_container_width=True, hide_index=True)
 
     # --- 漏点自动诊断 (参考 growth-funnel-agent 的 biggest-leak 思路) ---
@@ -205,11 +226,13 @@ elif page == PAGES[4]:
         use_container_width=True, hide_index=True)
     st.subheader("核销速度 (D1/D3/D7/D14 占最终核销者比例)")
     st.dataframe(q("""
-        WITH r AS (SELECT d.activity_segment,
-                   DATE_DIFF('hour', c.start_time, o.redemption_time)/24.0 rday
+        WITH fo AS (SELECT user_id, MIN(redemption_time) first_rt
+                    FROM fact_redemption_order WHERE redemption_status='success'
+                    GROUP BY user_id),  -- 先聚合到用户级再Join, 防一人多单膨胀(Ch2原则)
+        r AS (SELECT d.activity_segment,
+                   DATE_DIFF('hour', c.start_time, fo.first_rt)/24.0 rday
                    FROM dws_user_campaign d
-                   JOIN fact_redemption_order o ON d.user_id=o.user_id
-                        AND o.redemption_status='success'
+                   JOIN fo ON d.user_id=fo.user_id
                    CROSS JOIN dim_campaign c WHERE d.redeemed_14d_flag=1)
         SELECT activity_segment, COUNT(*) redeemers,
                ROUND(SUM(CASE WHEN rday<=1 THEN 1 ELSE 0 END)*100.0/COUNT(*),1) d1,
@@ -311,7 +334,7 @@ elif page == PAGES[6]:
     st.info("结论: Reminder 显著提升; Reward 边际增量小且不显著 -> 扩大分层提醒, 不做全量补贴。"
             "High 分群零增量 = Sure Thing, 是 Uplift 建模的直接动机。")
 
-# ---------------------------------------------------------------- Page 6 ROI
+# ---------------------------------------------------------------- Page 8 ROI
 elif page == PAGES[7]:
     st.title("ROI Simulator")
     c1, c2 = st.columns(2)
@@ -448,7 +471,7 @@ elif page == PAGES[10]:
                     FROM fact_experiment_assignment e
                     JOIN dws_user_campaign d ON e.user_id=d.user_id
                     GROUP BY 1 ORDER BY 1""",
-             explain="Reminder vs Control 差值即绝对Lift(+6.5pp, p≈0.03显著); "
+             explain="Reminder vs Control 差值即绝对Lift(+6.2pp, p≈0.03显著); "
                      "Reward 额外+2.3pp 不显著。显著性与CI详见实验页。"),
         dict(name="实验SRM检查(三组样本量)",
              tags=["srm", "样本", "比例", "分组", "1:1:1"],
@@ -489,7 +512,7 @@ elif page == PAGES[10]:
              sql="""SELECT ROUND(SUM(o.settlement_amount)*100.0/MAX(c.benefit_budget),1) budget_pct
                     FROM fact_redemption_order o CROSS JOIN dim_campaign c
                     WHERE o.redemption_status='success'""",
-             explain="已结算金额/批准预算=68.5%; 过低影响客户续约判断。"),
+             explain="已结算金额/批准预算; 过低影响客户续约判断。"),
         dict(name="分群(活跃度)核销率对比",
              tags=["分层", "分群", "活跃", "segment", "cohort", "对比"],
              sql="""SELECT activity_segment, COUNT(*) users,
@@ -628,20 +651,25 @@ elif page == PAGES[10]:
         else:
             cands = []
             llm_note = None
+            decision = None
             if llm_ready:
+                # 注意: st.stop() 抛出的 StopException 继承自 Exception,
+                # 不能放在 except Exception 的 try 块里, 否则拦截会被吞掉
                 try:
                     decision, source = deepseek_select_template(question)
                     llm_note = decision if decision else source
-                    if decision and decision.get("blocked"):
-                        st.error("ChatBI 拒绝回答: " + decision.get("reason", "问题不在安全范围内。"))
-                        append_chatbi_log(dict(问题=question, 状态="拒答", 模板="—"))
-                        st.stop()
-                    template_id = decision.get("template_id") if decision else None
-                    confidence = float(decision.get("confidence", 0)) if decision else 0
-                    if isinstance(template_id, int) and 0 <= template_id < len(TEMPLATES) and confidence >= 0.35:
-                        cands = [(round(confidence * 10, 1), TEMPLATES[template_id])]
                 except Exception:
+                    decision = None
                     llm_note = "DeepSeek 暂不可用, 已使用安全模板匹配继续回答。"
+            if decision and decision.get("blocked"):
+                st.error("ChatBI 拒绝回答: " + decision.get("reason", "问题不在安全范围内。"))
+                append_chatbi_log(dict(问题=question, 状态="拒答", 模板="—"))
+                st.stop()
+            if decision:
+                template_id = decision.get("template_id")
+                confidence = float(decision.get("confidence", 0) or 0)
+                if isinstance(template_id, int) and 0 <= template_id < len(TEMPLATES) and confidence >= 0.35:
+                    cands = [(round(confidence * 10, 1), TEMPLATES[template_id])]
             if not cands:
                 cands = retrieve(question)
             if not cands:
@@ -673,14 +701,16 @@ elif page == PAGES[10]:
                     st.error(f"执行失败: {e}")
                     status = "执行失败"
                 append_chatbi_log(dict(问题=question, 状态=status, 模板=t["name"]))
+    def _clear_chatbi():
+        # 必须用 on_click 回调: 回调在 rerun 前执行, 此时才允许修改已实例化 widget 的 state
+        st.session_state.chatbi_log = []
+        st.session_state.chatbi_question = ""
+
     if st.session_state.chatbi_log:
-        if st.button("清空查询日志", key="clear_chatbi_log"):
-            st.session_state.chatbi_log = []
-            st.session_state.chatbi_question = ""
-            st.rerun()
+        st.button("清空查询日志", key="clear_chatbi_log", on_click=_clear_chatbi)
         with st.expander(f"查询日志 ({len(st.session_state.chatbi_log)} 条)"):
             st.dataframe(pd.DataFrame(st.session_state.chatbi_log),
                          use_container_width=True, hide_index=True)
-    st.caption("权限规则: 企业隔离(enterprise_id 强制过滤) / 只读 / 字段白名单(无PII) / "
+    st.caption("权限规则(生产设计): 企业隔离(enterprise_id 过滤, 本demo为单企业数据) / 只读 / 字段白名单(无PII) / "
                "限流 / 结果与标准KPI表校验 / SQL日志。独立 ChatBI 项目展示更开放的 "
                "Text-to-SQL 架构(RAG检索 + sqlglot AST 安全门 + DeepSeek 生成)。")

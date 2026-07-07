@@ -75,7 +75,8 @@ def main_analysis(df):
     res_rem = two_prop_test(r.y.sum(), len(r), c.y.sum(), len(c), "Reminder vs Control")
     res_rew = two_prop_test(w.y.sum(), len(w), r.y.sum(), len(r), "Reminder+Reward vs Reminder")
 
-    print("\n========== 增量人数与初步 ROI ==========")
+    # 离线的增量/成本估算, 用于判断"值不值得做", 非上线业绩; ROI 数字不作为主线展示
+    print("\n========== 增量人数与贡献估算 (离线, 方向参考) ==========")
     inc_rem = res_rem["lift"] * len(r)
     inc_rew = res_rew["lift"] * len(w)
     # 单次增量核销贡献 = 结算收入 - 供应商成本（取全体订单平均毛差）
@@ -98,7 +99,7 @@ def main_analysis(df):
         lift = rs.y.mean() - cs.y.mean()
         print(f"  {seg:<7} n_c={len(cs):3d} n_t={len(rs):3d}  "
               f"{cs.y.mean():.1%} -> {rs.y.mean():.1%}  lift={lift*100:+.1f}pp")
-    print("  (注意: 分群样本量小, 只作方向参考, 是后续 Uplift 建模的动机)")
+    print("  (注意: 分群样本量小, 只作方向参考; 个体级 Uplift 建模属可选高级模块, 非主线)")
 
 
 def guardrails(con):

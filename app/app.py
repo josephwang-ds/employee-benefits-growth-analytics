@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Benefits Growth Analytics Demo — Streamlit Dashboard + DeepSeek ChatBI
+Benefits Growth Analytics Demo — 经营分析工作台 + 受控 ChatBI
 运行: streamlit run app/app.py
-包含指标字典、Funnel 漏点自动诊断、实验/ROI 分析，以及
-DeepSeek 路由 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日志
+业务主线: 六步漏斗诊断 -> 对照/提醒实验 -> 用户分层 -> 分层触达建议，
+再沉淀为指标字典与受控 ChatBI（DeepSeek 路由 -> 白名单模板 -> 只读执行 -> 结果校验 -> 查询日志）。
+ROI 与个体级 Uplift 作为可选的离线/高级分析模块，不作为主线。
 """
 import sys
 import os
@@ -40,7 +41,7 @@ def q(sql, params=None):
 
 PAGES = ["1 Executive Overview", "2 Data Schema (表结构)", "3 指标字典 (口径)",
          "4 Funnel 诊断", "5 Cohort 分析", "6 用户分层", "7 实验结果",
-         "8 ROI Simulator", "9 采购与库存", "10 供应商履约", "11 ChatBI"]
+         "8 策略模拟 (可选/离线)", "9 采购与库存", "10 供应商履约", "11 ChatBI"]
 page = st.sidebar.radio("页面", PAGES)
 st.sidebar.caption("Demo 数据为按真实项目口径校准的模拟数据（企业/员工信息已脱敏）")
 
@@ -48,42 +49,26 @@ st.sidebar.caption("Demo 数据为按真实项目口径校准的模拟数据（�
 if page == PAGES[0]:
     st.title("Executive Overview — 2026春季员工关怀福利活动")
     k = q("""
-        SELECT COUNT(*) elig, SUM(issued_flag) iss, SUM(reached_flag) rch,
-               SUM(visited_flag) vis, SUM(claimed_flag) clm,
+        SELECT COUNT(*) elig, SUM(issued_flag) iss,
                SUM(redeemed_14d_flag) rdm,
-               SUM(CASE WHEN redeemed_14d_flag=1 AND fulfilled_flag=1 THEN 1 ELSE 0 END) ful,
-               SUM(settlement_amount) settled, SUM(supplier_cost) sup_cost,
-               SUM(reward_cost) rew_cost
+               SUM(settlement_amount) settled
         FROM dws_user_campaign""").iloc[0]
     budget = q("SELECT benefit_budget FROM dim_campaign").iloc[0, 0]
+    # 首页只放最好讲的几个数字; 完整漏斗/收入口径下沉到各自页面, 避免"编得太完整"
     c = st.columns(4)
-    c[0].metric("Eligible Employees", f"{int(k.elig):,}",
+    c[0].metric("覆盖员工", f"{int(k.elig):,}",
                 help="资格名单人数, 漏斗起点。来源: fact_campaign_eligibility")
-    c[1].metric("发放成功率", f"{k.iss/k.elig:.1%}",
-                help="成功发放用户/符合资格用户 (用户级 distinct)。失败原因: 账号异常/接口超时/名单缺失")
-    c[2].metric("触达率", f"{k.rch/k.iss:.1%}",
-                help="至少一条消息送达的用户/成功发放用户。发送成功≠送达, 打开≠访问")
-    c[3].metric("累计访问率", f"{k.vis/k.iss:.1%}",
-                help="进入活动页的用户/成功发放用户。触达→访问≈69%, 是最大掉点之一")
-    c = st.columns(4)
-    c[0].metric("累计领取率", f"{k.clm/k.iss:.1%}",
-                help="成功领取用户/成功发放用户。领取≠兑换≠履约")
     c[1].metric("14天核销率", f"{k.rdm/k.iss:.1%}",
                 help="14天内有效核销用户/成功发放用户。排除测试/重复/取消/退款/补单; 首次有效核销")
-    c[2].metric("有效履约用户率", f"{k.ful/k.iss:.1%}",
-                help="北极星: 核销且履约成功/成功发放。核销了没拿到权益等于没发")
+    c[2].metric("提醒实验增量", "+6.2pp",
+                help="到期提醒组 vs 对照组 14天核销率: 28.6% → 34.8% (显著)。明细见「7 实验结果」")
     c[3].metric("预算使用率", f"{k.settled/budget:.1%}",
-                help="已结算金额/批准预算。客户续约判断的核心之一")
-    c = st.columns(3)
-    c[0].metric("企业结算收入", f"¥{k.settled:,.0f}",
-                help="有效核销订单 settlement_amount 合计")
-    c[1].metric("采购成本(已消耗)", f"¥{k.sup_cost:,.0f}",
-                help="已核销卡券对应的采购成本")
-    c[2].metric("贡献毛利", f"¥{k.settled - k.sup_cost - k.rew_cost:,.0f}",
-                help="收入-已消耗采购成本-奖励。完整口径还需减过期损失和消息成本, 见指标字典")
-    st.info("Executive Summary: 发放与触达正常; 主要流失在 触达→访问 与 领取→核销; "
-            "到期提醒实验显示 +6.2pp 增量, 额外奖励边际价值有限, 建议扩大分层提醒而非全量补贴。")
-    st.caption("每个卡片右上角 ? 号有完整口径; 更详细的分子/分母/排除规则见「3 指标字典」页")
+                help="已结算金额/批准预算。客户续约判断的核心之一 (可选指标)")
+    st.info("业务主线: 活动发出后主要流失在 触达→访问 与 领取→核销; "
+            "到期提醒实验显示 +6.2pp 真实增量; 据此把全量补贴改为分层提醒与重点人群触达, "
+            "减少对低增量人群的补贴浪费、提升预算使用效率。")
+    st.caption("完整六步漏斗与各阶段口径见「4 Funnel 诊断」; 实验统计明细见「7 实验结果」; "
+               "ROI 为可选的离线策略模拟, 见「8 策略模拟」。")
 
 # ---------------------------------------------------------------- Page 2 Data Schema
 elif page == PAGES[1]:
@@ -241,7 +226,7 @@ elif page == PAGES[4]:
                ROUND(SUM(CASE WHEN rday<=14 THEN 1 ELSE 0 END)*100.0/COUNT(*),1) d14
         FROM r GROUP BY 1"""), use_container_width=True, hide_index=True)
     st.caption("注意: Cohort 描述差异, 不做因果判断; 因果结论以实验为准。"
-               "High 分群本次核销率最高=Sure Thing 证据, 是 Uplift 建模动机。")
+               "High 分群本次核销率最高=Sure Thing 证据 (个体级 Uplift 分析的动机, 属可选高级模块)。")
 
 # ---------------------------------------------------------------- Page 6 用户分层
 elif page == PAGES[5]:
@@ -332,11 +317,13 @@ elif page == PAGES[6]:
                         lift_pp=round((tt - cc_) * 100, 1)))
     st.dataframe(pd.DataFrame(het), use_container_width=True, hide_index=True)
     st.info("结论: Reminder 显著提升; Reward 边际增量小且不显著 -> 扩大分层提醒, 不做全量补贴。"
-            "High 分群零增量 = Sure Thing, 是 Uplift 建模的直接动机。")
+            "High 分群零增量 = Sure Thing; 若要进一步做个体级增量(Uplift)分析, 这是动机 —— 属可选高级模块, 非主线。")
 
 # ---------------------------------------------------------------- Page 8 ROI
 elif page == PAGES[7]:
-    st.title("ROI Simulator")
+    st.title("策略模拟 (Policy Simulation) — 可选 / 离线")
+    st.warning("这是**上线前的离线策略模拟**, 用于估算不同触达/补贴策略的增量与成本, "
+               "**不是已发生的上线业绩**。真实 ROI 需在新活动中用 Holdout 验证。")
     c1, c2 = st.columns(2)
     n_target = c1.number_input("目标触达人数", 100, 5000, 1500, 100)
     rev = c1.number_input("单次核销企业结算收入(元)", 10.0, 200.0, 85.0)
@@ -419,9 +406,10 @@ elif page == PAGES[9]:
 
 # ---------------------------------------------------------------- Page 11 ChatBI
 elif page == PAGES[10]:
-    st.title("ChatBI (DeepSeek + 受控SQL)")
-    st.caption("管线: DeepSeek 解析业务问题 → 匹配指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
-               "LLM 只负责选模板, 不生成自由 SQL; 系统始终执行已审核的标准指标模板。")
+    st.title("受控经营分析助手 (ChatBI / 自然语言取数)")
+    st.caption("定位: 受控的自然语言取数与复盘工具, 不是自动决策 Agent。"
+               "管线: DeepSeek 解析业务问题 → 匹配指标字典/白名单模板 → 只读SQL → 结果校验 → 业务解释 → 查询日志。"
+               "LLM 只负责选模板, 不生成自由 SQL; 系统始终执行已审核的标准指标模板 (字段白名单 + 权限隔离 + 结果校验)。")
 
     # ---- 同义词字典 (参考 chatbi/ragbi.py 的 metric dictionary 思路) ----
     SYNONYMS = {

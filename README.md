@@ -14,8 +14,9 @@ offline/advanced modules**, not the main storyline.
 ## Business context
 
 A third-party benefits platform purchases coupons upfront, distributes them to
-~5,000 employees of an enterprise client, and is paid per successful
-redemption. Low redemption therefore hurts three ways: unrealized revenue,
+employees of enterprise clients, and is paid per successful redemption. The
+real program covered ~20K users and ~120K voucher records over three years; the
+synthetic dataset here is scaled down to a single ~5,000-employee campaign. Low redemption therefore hurts three ways: unrealized revenue,
 tied-up purchasing capital, and expiry losses on non-refundable inventory.
 The goal is not "maximize redemption" but **maximize incremental contribution
 margin under budget, complaint, and fulfillment-capacity guardrails**.
@@ -100,5 +101,5 @@ to GitHub.
 
 - **ChatBI** — standalone Text-to-SQL project with RAG schema linking, sqlglot
   AST safety gates, and result validation. This demo uses the same safety
-  philosophy while keeping SQL template-controlled for interview reliability.
-- **Growth & Funnel Agent** — funnel-leak detection and budget reallocation.
+  philosophy while keeping SQL template-controlled for reliability.
+- Live demo and the other projects: [josephjwang.com/demos](https://www.josephjwang.com/demos)
